@@ -25,7 +25,7 @@ type Essence struct {
 	ChildrenIds         pq.Int64Array `json:"children_ids" db:"children_ids"`
 }
 
-func getStepsDown(db *sqlx.DB) ([]Edge, error) {
+func getStepsDown(db *sqlx.DB, rootId int) ([]Edge, error) {
 	const modelTable = "graph_essence"
 	const essenceThroughTable = "graph_essencethrough"
 	const SQL_ = `
@@ -60,7 +60,7 @@ func getStepsDown(db *sqlx.DB) ([]Edge, error) {
         --    on child_id = m.id
         --order by M.name, M.id
 	`
-	var SQL = fmt.Sprintf(SQL_, modelTable, essenceThroughTable, EssenceRootId)
+	var SQL = fmt.Sprintf(SQL_, modelTable, essenceThroughTable, rootId)
 
 	rows, err := db.Query(SQL)
 	if err != nil {
@@ -133,7 +133,19 @@ func bulkUpdateGraphData(ids []int, graph *Graph, db *sqlx.DB) error {
         if err != nil {
             log.Fatalln(err)
         }
-        if essence.
+        essences = append(essences, &essence)
+        if essence.SchemaDefinitionIds == nil {
+        	essence.SchemaDefinitionIds = []int64{}
+		}
+		if essence.DefinitionIds == nil {
+			essence.DefinitionIds = []int64{}
+		}
+		if essence.ParentIds == nil {
+			essence.ParentIds = []int64{}
+		}
+		if essence.ChildrenIds == nil {
+			essence.ChildrenIds = []int64{}
+		}
     }
 	fillGraphData(essences, graph)
 	return nil
@@ -145,9 +157,9 @@ func fillGraphData(essences []*Essence, graph *Graph) {
 	}
 }
 
-func ProcessSteps(steps []Edge, db *sqlx.DB) (*Graph, error) {
+func ProcessSteps(steps []Edge, rootId int, db *sqlx.DB) (*Graph, error) {
 
-	graph := NewGraph(EssenceRootId)
+	graph := NewGraph(rootId)
 	graph.AddEdges(steps)
 
 	//fmt.Println("got node", len(graph.nodesList()), graph.nodes[198188])
@@ -180,13 +192,13 @@ func ProcessSteps(steps []Edge, db *sqlx.DB) (*Graph, error) {
 	return graph, nil
 }
 
-func GetEssenceGraph(db *sqlx.DB) *Graph {
-	steps, err := getStepsDown(db)
+func GetEssenceGraph(db *sqlx.DB, rootId int) *Graph {
+	steps, err := getStepsDown(db, rootId)
 	if err != nil {
 		fmt.Println("error on get steps down", err)
 		panic(err)
 	}
-	graph, err := ProcessSteps(steps, db)
+	graph, err := ProcessSteps(steps, rootId, db)
 	if err != nil {
 		fmt.Println("error from procesSteps")
 		panic(err)

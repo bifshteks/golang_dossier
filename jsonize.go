@@ -2,7 +2,7 @@ package main
 
 type JsonGraph struct {
 	Essence
-	Children []*JsonGraph
+	Children []*JsonGraph `json:"children"`
 }
 
 func JsonizeGraph(node *GraphNode, graph *Graph) *JsonGraph {

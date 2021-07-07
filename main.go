@@ -2,13 +2,16 @@ package main
 
 import (
 	"fmt"
+	"github.com/gin-contrib/cors"
 	"github.com/gin-gonic/gin"
 	_ "github.com/lib/pq"
+	"strconv"
+	"time"
 )
 
-const EssenceRootId = 649 //176945 //649
+//const EssenceRootId = 176945 //649
 
-func doJob() (*Graph, MarkDict, EdgeDict) {
+func doJob(essenceRootId int) (*Graph, MarkDict, EdgeDict) {
 	db, err := DbConnect()
 	if err != nil {
 		panic(err)
@@ -20,7 +23,7 @@ func doJob() (*Graph, MarkDict, EdgeDict) {
 		}
 	}()
 	fmt.Println("before execSql")
-	graph := GetEssenceGraph(db)
+	graph := GetEssenceGraph(db, essenceRootId)
 	markDict := GetMarkDict(graph, db) //
 	linksDict := graph.edges            //
 	return graph, markDict, linksDict
@@ -30,12 +33,24 @@ func doJob() (*Graph, MarkDict, EdgeDict) {
 
 func main() {
 	r := gin.Default()
-	r.GET("/ping", func(c *gin.Context) {
-		graph, _, _ := doJob()
+    r.Use(cors.New(cors.Config{
+        AllowOrigins:     []string{"*"},
+        AllowMethods:     []string{"PUT", "PATCH", "GET", "OPTIONS"},
+        AllowHeaders:     []string{"*"},
+        ExposeHeaders:    []string{"Content-Length"},
+        AllowCredentials: true,
+        //AllowOriginFunc: func(origin string) bool {
+        //    return origin == "https://github.com"
+        //},
+        MaxAge: 12 * time.Hour,
+    }))
+	r.GET("/api/essences/:id/", func(c *gin.Context) {
+		id, _ := strconv.Atoi(c.Param("id"))
+		graph, marks, _ := doJob(id)
 		c.JSON(200, gin.H{
-			//"message": marks,
-			//"qwe": links,
-			"graph": JsonizeGraph(graph.nodes[graph.rootId], graph),
+			"marks": marks,
+			//"links": links,
+			"tree": JsonizeGraph(graph.nodes[graph.rootId], graph),
 		})
 	})
 	if err := r.Run(); err != nil {
