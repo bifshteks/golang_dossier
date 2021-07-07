@@ -5,12 +5,10 @@ import (
 	"fmt"
 	"github.com/jmoiron/sqlx"
 )
-//type MarkAsDict struct {
-//	essenceId int
-//	marks []Mark
-//}
 
-func GetMarkDict(graph *Graph, db *sqlx.DB) map[int][]*Mark {
+type MarkDict map[int][]*Mark
+
+func GetMarkDict(graph *Graph, db *sqlx.DB) MarkDict {
 	markList, err := getMarksFromDB(graph, db)
 	if err != nil {
 		panic(err)
@@ -26,15 +24,15 @@ func GetMarkDict(graph *Graph, db *sqlx.DB) map[int][]*Mark {
 	return markDict
 }
 
-type Mark struct {
-	ID int
-	CreatorId sql.NullInt64 `db:"creator_id"`
-	EssenceId int `db:"essence_id"`
-	CreatedDate string `db:"created_date"`
-	Color string
-	Comment string
-}
 
+type Mark struct {
+	ID          int           `json:"id"`
+	CreatorId   sql.NullInt64 `json:"creator_id" db:"creator_id"`
+	EssenceId   int           `json:"essence_id" db:"essence_id"`
+	CreatedDate string        `json:"created_date" db:"created_date"`
+	Color       string        `json:"color"`
+	Comment     string        `json:"comment"`
+}
 
 func getMarksFromDB(graph *Graph, db *sqlx.DB) ([]*Mark, error) {
 	var marksList []*Mark

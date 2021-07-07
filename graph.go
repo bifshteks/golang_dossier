@@ -5,23 +5,88 @@ import (
 	"github.com/google/uuid"
 	"github.com/jmoiron/sqlx"
 	"github.com/lib/pq"
+	"log"
 )
 
 type Essence struct {
-	ID                  int
-	HorizontalID        uuid.UUID `db:"horizontal_id"`
-	Version             int
-	CreatedDate         string `db:"created_date"`
-	UpdatedDate         string `db:"updated_date"`
-	Name                string
-	Slug                string
-	Value               string
-	SchemaId            int           `db:"schema_id"`
-	RemovedFromGraph    bool          `db:"removed_from_graph"`
-	SchemaDefinitionIds pq.Int64Array `db:"schema_definition_ids"`
-	DefinitionIds       pq.Int64Array `db:"definition_ids"`
-	ParentIds           pq.Int64Array `db:"parent_ids"`
-	ChildrenIds         pq.Int64Array `db:"children_ids"`
+	ID                  int           `json:"id"`
+	HorizontalID        uuid.UUID     `json:"horizontal_id" db:"horizontal_id"`
+	Version             int           `json:"version"`
+	CreatedDate         string        `json:"created_date" db:"created_date"`
+	UpdatedDate         string        `json:"updated_date" db:"updated_date"`
+	Name                string        `json:"name"`
+	Slug                string        `json:"slug"`
+	Value               string        `json:"value"`
+	SchemaId            int           `json:"schema_id" db:"schema_id"`
+	RemovedFromGraph    bool          `json:"removed_from_graph" db:"removed_from_graph"`
+	SchemaDefinitionIds pq.Int64Array `json:"schema_definition_ids" db:"schema_definition_ids"`
+	DefinitionIds       pq.Int64Array `json:"definition_ids" db:"definition_ids"`
+	ParentIds           pq.Int64Array `json:"parent_ids" db:"parent_ids"`
+	ChildrenIds         pq.Int64Array `json:"children_ids" db:"children_ids"`
+}
+
+func getStepsDown(db *sqlx.DB) ([]Edge, error) {
+	const modelTable = "graph_essence"
+	const essenceThroughTable = "graph_essencethrough"
+	const SQL_ = `
+        -- В recursive_buffer хранятся все м2м элементы-связки, элементы которых есть в указанном графе
+        WITH RECURSIVE recursive_buffer AS (
+            -- Первый селект - м2м элементы-связки, где ребенок - заданный корень
+            SELECT
+                id, parent_id, child_id
+            FROM
+                %[2]s -- through  --
+            WHERE
+                parent_id = %[3]d -- element_id  --
+
+            -- используем UNION, а не UNION ALL, т.к. если мы получаем данные по графу, а не дереву,
+            -- то может добавить несколько одинаковых записей с буфер (пройтись дважды по одному пути).
+            UNION
+
+            SELECT
+                -- L.id нужен, потому-что для сырого запроса джанга всегда требует чтобы быть
+                -- уникальный ключ для каждой строки
+                --(django.db.models.query_utils.InvalidQuery: Raw query must include the primary key)
+                L.id, L.parent_id, L.child_id
+            FROM
+                recursive_buffer AS P
+                INNER JOIN %[2]s AS L -- through  --
+                    ON P.child_id = L.parent_id
+        )
+        select
+           ASD.parent_id, ASD.child_id
+        from recursive_buffer as ASD
+        --inner join %[1]s as M
+        --    on child_id = m.id
+        --order by M.name, M.id
+	`
+	var SQL = fmt.Sprintf(SQL_, modelTable, essenceThroughTable, EssenceRootId)
+
+	rows, err := db.Query(SQL)
+	if err != nil {
+		return nil, err
+	}
+	defer func() {
+		err = rows.Close()
+		if err != nil {
+			fmt.Println("Could not close steps rows")
+		}
+	}()
+	var edges []Edge
+	for rows.Next() {
+		var edge Edge
+		err = rows.Scan(&edge.ParentId, &edge.ChildId)
+		if err != nil {
+			return nil, err
+		}
+		edges = append(edges, edge)
+	}
+	// get any error encountered during iteration
+	err = rows.Err()
+	if err != nil {
+		return nil, err
+	}
+	return edges, nil
 }
 
 func bulkUpdateGraphData(ids []int, graph *Graph, db *sqlx.DB) error {
@@ -53,23 +118,36 @@ func bulkUpdateGraphData(ids []int, graph *Graph, db *sqlx.DB) error {
 	if err != nil {
 		return err
 	}
-	err = db.Select(&essences, db.Rebind(q), args...)
-	if err != nil {
-		return err
+	//err = db.Select(&essences, db.Rebind(q), args...)
+	//if err != nil {
+	//	return err
+	//}
+
+    rows, err := db.Queryx(db.Rebind(q), args...)
+    if err != nil {
+    	return err
 	}
+    for rows.Next() {
+    	var essence Essence
+        err := rows.StructScan(&essence)
+        if err != nil {
+            log.Fatalln(err)
+        }
+        if essence.
+    }
 	fillGraphData(essences, graph)
 	return nil
 }
 
 func fillGraphData(essences []*Essence, graph *Graph) {
 	for _, essence := range essences {
-		graph.nodes[essence.ID].data = essence
+		graph.nodes[essence.ID].Data = essence
 	}
 }
 
 func ProcessSteps(steps []Edge, db *sqlx.DB) (*Graph, error) {
 
-	graph := NewGraph()
+	graph := NewGraph(EssenceRootId)
 	graph.AddEdges(steps)
 
 	//fmt.Println("got node", len(graph.nodesList()), graph.nodes[198188])
@@ -97,14 +175,13 @@ func ProcessSteps(steps []Edge, db *sqlx.DB) (*Graph, error) {
 		return nil, err
 	}
 
-	fmt.Println("end data for ess")//, graph.nodes[198188].data)
+	fmt.Println("end data for ess") //, graph.nodes[198188].data)
 
 	return graph, nil
 }
 
-func GetEssenceGraph(db *sqlx.DB) (*Graph) {
-	const essenceRootId = 649
-	steps, err := getStepsDown(essenceRootId, db)
+func GetEssenceGraph(db *sqlx.DB) *Graph {
+	steps, err := getStepsDown(db)
 	if err != nil {
 		fmt.Println("error on get steps down", err)
 		panic(err)

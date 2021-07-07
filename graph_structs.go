@@ -3,14 +3,15 @@ package main
 type EdgeDict map[int]map[int]EdgeData
 type Graph struct {
 	//nodes_list []*GraphNode
-	nodes map[int]*GraphNode
-	edges EdgeDict // edge[1<parent>][2<child>] = EdgeData{}
+	rootId int
+	nodes  map[int]*GraphNode
+	edges  EdgeDict // edge[1<parent>][2<child>] = EdgeData{}
 }
 type GraphNode struct {
-	ID           int
-	successors   []int
-	predecessors []int
-	data         *Essence
+	ID           int      `json:"id"`
+	Successors   []int    `json:"successors"`
+	Predecessors []int    `json:"predecessors"`
+	Data         *Essence `json:"data"`
 }
 type EdgeData map[string]string
 type Edge struct {
@@ -22,8 +23,8 @@ type Edge struct {
 func (g *Graph) AddNode(id int) {
 	g.nodes[id] = &GraphNode{
 		ID:           id,
-		successors:   make([]int, 0), // https://www.reddit.com/r/golang/comments/4rinrk/how_do_you_create_an_array_of_variable_length/
-		predecessors: make([]int, 0),
+		Successors:   make([]int, 0), // https://www.reddit.com/r/golang/comments/4rinrk/how_do_you_create_an_array_of_variable_length/
+		Predecessors: make([]int, 0),
 	}
 }
 
@@ -34,8 +35,8 @@ func (g *Graph) AddEdge(edge Edge) {
 	if _, ok := g.nodes[edge.ChildId]; !ok {
 		g.AddNode(edge.ChildId)
 	}
-	g.nodes[edge.ParentId].successors = append(g.nodes[edge.ParentId].successors, edge.ChildId)
-	g.nodes[edge.ChildId].predecessors = append(g.nodes[edge.ChildId].predecessors, edge.ParentId)
+	g.nodes[edge.ParentId].Successors = append(g.nodes[edge.ParentId].Successors, edge.ChildId)
+	g.nodes[edge.ChildId].Predecessors = append(g.nodes[edge.ChildId].Predecessors, edge.ParentId)
 
 	childDict, ok := g.edges[edge.ParentId]
 	if !ok {
@@ -75,9 +76,10 @@ func (g *Graph) nodesIdsList() []int {
 //	return edges
 //}
 
-func NewGraph() *Graph {
+func NewGraph(rootId int) *Graph {
 	return &Graph{
-		nodes: make(map[int]*GraphNode),
-		edges: make(EdgeDict),
+		rootId: rootId,
+		nodes:  make(map[int]*GraphNode),
+		edges:  make(EdgeDict),
 	}
 }
