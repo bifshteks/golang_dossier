@@ -1,4 +1,4 @@
-package main
+package essence
 //
 //
 //func GetGraphLinks(graph *Graph) LinksDict {

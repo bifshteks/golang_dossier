@@ -1,14 +1,15 @@
-package main
+package essence
 
 import (
 	"database/sql"
 	"fmt"
 	"github.com/jmoiron/sqlx"
+	g "golang_dossier/graph"
 )
 
 type MarkDict map[int][]*Mark
 
-func GetMarkDict(graph *Graph, db *sqlx.DB) MarkDict {
+func GetMarkDict(graph *g.Graph, db *sqlx.DB) MarkDict {
 	markList, err := getMarksFromDB(graph, db)
 	if err != nil {
 		panic(err)
@@ -34,7 +35,7 @@ type Mark struct {
 	Comment     string        `json:"comment"`
 }
 
-func getMarksFromDB(graph *Graph, db *sqlx.DB) ([]*Mark, error) {
+func getMarksFromDB(graph *g.Graph, db *sqlx.DB) ([]*Mark, error) {
 	var marksList []*Mark
 
 	q, args, err := sqlx.In(`
@@ -42,7 +43,7 @@ func getMarksFromDB(graph *Graph, db *sqlx.DB) ([]*Mark, error) {
 			*
 		from graph_essencemark
 		where essence_id IN (?)
-	`, graph.nodesIdsList())
+	`, graph.NodesIdsList())
 	if err != nil {
 		fmt.Println("error on in")
 		return nil, err

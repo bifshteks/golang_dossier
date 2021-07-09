@@ -5,14 +5,17 @@ import (
 	"github.com/gin-contrib/cors"
 	"github.com/gin-gonic/gin"
 	_ "github.com/lib/pq"
+	"golang_dossier/database"
+	g "golang_dossier/graph"
+	ge "golang_dossier/graph/essence"
 	"strconv"
 	"time"
 )
 
 //const EssenceRootId = 176945 //649
 
-func doJob(essenceRootId int) (*Graph, MarkDict, EdgeDict) {
-	db, err := DbConnect()
+func doJob(essenceRootId int) (*g.Graph, ge.MarkDict, g.EdgeDict) {
+	db, err := database.DbConnect()
 	if err != nil {
 		panic(err)
 	}
@@ -23,9 +26,9 @@ func doJob(essenceRootId int) (*Graph, MarkDict, EdgeDict) {
 		}
 	}()
 	fmt.Println("before execSql")
-	graph := GetEssenceGraph(db, essenceRootId)
-	markDict := GetMarkDict(graph, db) //
-	linksDict := graph.edges            //
+	graph := ge.GetEssenceGraph(db, essenceRootId)
+	markDict := ge.GetMarkDict(graph, db) //
+	linksDict := graph.Edges            //
 	return graph, markDict, linksDict
 	//fmt.Println("marksDict", markDict, "\n\n")
 	//fmt.Println("linksDict", linksDict, "\n\n")
@@ -50,10 +53,10 @@ func main() {
 		c.JSON(200, gin.H{
 			"marks": marks,
 			//"links": links,
-			"tree": JsonizeGraph(graph.nodes[graph.rootId], graph),
+			"tree": JsonizeGraph(graph.Nodes[graph.RootId], graph),
 		})
 	})
-	if err := r.Run(); err != nil {
+	if err := r.Run(":8090"); err != nil {
 		fmt.Println("Could not run server")
 	}
 }

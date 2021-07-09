@@ -1,10 +1,11 @@
-package main
+package essence
 
 import (
 	"fmt"
 	"github.com/google/uuid"
 	"github.com/jmoiron/sqlx"
 	"github.com/lib/pq"
+	g "golang_dossier/graph"
 	"log"
 )
 
@@ -18,14 +19,14 @@ type Essence struct {
 	Slug                string        `json:"slug"`
 	Value               string        `json:"value"`
 	SchemaId            int           `json:"schema_id" db:"schema_id"`
-	RemovedFromGraph    bool          `json:"removed_from_graph" db:"removed_from_graph"`
+	//RemovedFromGraph    bool          `json:"removed_from_graph" db:"removed_from_graph"`
 	SchemaDefinitionIds pq.Int64Array `json:"schema_definition_ids" db:"schema_definition_ids"`
 	DefinitionIds       pq.Int64Array `json:"definition_ids" db:"definition_ids"`
-	ParentIds           pq.Int64Array `json:"parent_ids" db:"parent_ids"`
-	ChildrenIds         pq.Int64Array `json:"children_ids" db:"children_ids"`
+	//ParentIds           pq.Int64Array `json:"parent_ids" db:"parent_ids"`
+	//ChildrenIds         pq.Int64Array `json:"children_ids" db:"children_ids"`
 }
 
-func getStepsDown(db *sqlx.DB, rootId int) ([]Edge, error) {
+func getStepsDown(db *sqlx.DB, rootId int) ([]g.Edge, error) {
 	const modelTable = "graph_essence"
 	const essenceThroughTable = "graph_essencethrough"
 	const SQL_ = `
@@ -56,7 +57,8 @@ func getStepsDown(db *sqlx.DB, rootId int) ([]Edge, error) {
         select
            ASD.parent_id, ASD.child_id
         from recursive_buffer as ASD
-        --inner join %[1]s as M
+        --DONT NEED IT 
+		--inner join %[1]s as M
         --    on child_id = m.id
         --order by M.name, M.id
 	`
@@ -72,9 +74,9 @@ func getStepsDown(db *sqlx.DB, rootId int) ([]Edge, error) {
 			fmt.Println("Could not close steps rows")
 		}
 	}()
-	var edges []Edge
+	var edges []g.Edge
 	for rows.Next() {
-		var edge Edge
+		var edge g.Edge
 		err = rows.Scan(&edge.ParentId, &edge.ChildId)
 		if err != nil {
 			return nil, err
@@ -89,7 +91,7 @@ func getStepsDown(db *sqlx.DB, rootId int) ([]Edge, error) {
 	return edges, nil
 }
 
-func bulkUpdateGraphData(ids []int, graph *Graph, db *sqlx.DB) error {
+func bulkUpdateGraphData(ids []int, graph *g.Graph, db *sqlx.DB) error {
 	var essences []*Essence
 	q, args, err := sqlx.In(`
 		SELECT 
@@ -102,11 +104,11 @@ func bulkUpdateGraphData(ids []int, graph *Graph, db *sqlx.DB) error {
 		       "graph_essence"."slug", 
 		       "graph_essence"."value", 
 		       "graph_essence"."schema_id", 
-		       "graph_essence"."removed_from_graph", 
-		       ARRAY_AGG("graph_schemadefinition"."defining_id" ) filter (where "graph_schemadefinition"."defining_id"  is not null) AS "schema_definition_ids", 
+		       --"graph_essence"."removed_from_graph", 
+		       ARRAY_AGG("graph_schemadefinition"."defining_id" ) filter (where "graph_schemadefinition"."defining_id"  is not null) AS "schema_definition_ids",
 		       ARRAY_AGG("graph_essencedefinition"."defining_id" ) filter (where "graph_essencedefinition"."defining_id"  is not null) AS "definition_ids",
-		       ARRAY_AGG("graph_essencethrough"."child_id" ) filter (where "graph_essencethrough"."child_id"  is not null) AS "children_ids", 
-		       ARRAY_AGG(T9."parent_id" ) filter (where T9."parent_id"  is not null) AS "parent_ids" 
+		       --ARRAY_AGG("graph_essencethrough"."child_id" ) filter (where "graph_essencethrough"."child_id"  is not null) AS "children_ids", 
+		       --ARRAY_AGG(T9."parent_id" ) filter (where T9."parent_id"  is not null) AS "parent_ids" 
 		FROM "graph_essence" 
 		    INNER JOIN "graph_schema" ON ("graph_essence"."schema_id" = "graph_schema"."id") 
 		    LEFT OUTER JOIN "graph_schemadefinition" ON ("graph_schema"."id" = "graph_schemadefinition"."defined_id") 
@@ -118,10 +120,6 @@ func bulkUpdateGraphData(ids []int, graph *Graph, db *sqlx.DB) error {
 	if err != nil {
 		return err
 	}
-	//err = db.Select(&essences, db.Rebind(q), args...)
-	//if err != nil {
-	//	return err
-	//}
 
     rows, err := db.Queryx(db.Rebind(q), args...)
     if err != nil {
@@ -140,33 +138,33 @@ func bulkUpdateGraphData(ids []int, graph *Graph, db *sqlx.DB) error {
 		if essence.DefinitionIds == nil {
 			essence.DefinitionIds = []int64{}
 		}
-		if essence.ParentIds == nil {
-			essence.ParentIds = []int64{}
-		}
-		if essence.ChildrenIds == nil {
-			essence.ChildrenIds = []int64{}
-		}
+		//if essence.ParentIds == nil {
+		//	essence.ParentIds = []int64{}
+		//}
+		//if essence.ChildrenIds == nil {
+		//	essence.ChildrenIds = []int64{}
+		//}
     }
 	fillGraphData(essences, graph)
 	return nil
 }
 
-func fillGraphData(essences []*Essence, graph *Graph) {
+func fillGraphData(essences []*Essence, graph *g.Graph) {
 	for _, essence := range essences {
-		graph.nodes[essence.ID].Data = essence
+		graph.Nodes[essence.ID].Data = essence
 	}
 }
 
-func ProcessSteps(steps []Edge, rootId int, db *sqlx.DB) (*Graph, error) {
+func ProcessSteps(steps []g.Edge, rootId int, db *sqlx.DB) (*g.Graph, error) {
 
-	graph := NewGraph(rootId)
+	graph := g.NewGraph(rootId)
 	graph.AddEdges(steps)
 
 	//fmt.Println("got node", len(graph.nodesList()), graph.nodes[198188])
 
 	var essenceIdToBulkGetData []int
 	i := 0
-	for _, nodeId := range graph.nodesIdsList() {
+	for _, nodeId := range graph.NodesIdsList() {
 		if i > 1000 {
 			err := bulkUpdateGraphData(essenceIdToBulkGetData, graph, db)
 			if err != nil {
@@ -192,7 +190,7 @@ func ProcessSteps(steps []Edge, rootId int, db *sqlx.DB) (*Graph, error) {
 	return graph, nil
 }
 
-func GetEssenceGraph(db *sqlx.DB, rootId int) *Graph {
+func GetEssenceGraph(db *sqlx.DB, rootId int) *g.Graph {
 	steps, err := getStepsDown(db, rootId)
 	if err != nil {
 		fmt.Println("error on get steps down", err)
